@@ -1,0 +1,9 @@
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+python-multipart==0.0.20
+PyMuPDF==1.25.1
+openai==1.59.8
+redis==5.2.1
+python-dotenv==1.0.1
+pydantic==2.10.6
+rapidocr-onnxruntime==1.4.4
