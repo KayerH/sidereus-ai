@@ -217,7 +217,7 @@ function ResultPanel({ result, loading }) {
     return (
       <section className="result-panel centered">
         <Loader2 className="spin" size={34} />
-        <p>正在分析，通常需要 1-2 分钟，请保持页面打开。</p>
+        <p>正在分析，通常需要 3-5 分钟，请保持页面打开。</p>
         <div className="progress-steps">
           {LOADING_STEPS.map((step, index) => (
             <span key={step} style={{ animationDelay: `${index * 0.35}s` }}>
