@@ -1,24 +1,49 @@
+# Local secrets and environment files
 .env
 .env.*
 !.env.example
 !backend/.env.example
 !frontend/.env.example
 API_KEY.txt
+
+# Root-only private notes and test files
 /*.md
 !/README.md
 /*.pdf
+/*.zip
+
+# Local Codex/agent workspace state
+.agents/
+.codex/
+
+# Python caches and virtual environments
 __pycache__/
 *.py[cod]
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+.coverage
+htmlcov/
 .venv/
 venv/
 
+# Frontend dependencies and build output
 node_modules/
 dist/
 frontend/dist/
-tmp/
 
+# Temporary files and deployment scratch space
+tmp/
+.fc/
+.s/
+.serverless/
+
+# Local databases and logs
+*.db
+*.sqlite
+*.sqlite3
+*.log
+
+# OS files
 .DS_Store
 Thumbs.db

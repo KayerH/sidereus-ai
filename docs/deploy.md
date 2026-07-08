@@ -98,9 +98,9 @@ https://your-fc-http-trigger-domain/api/health
 }
 ```
 
-### 可选方式：自定义运行时
+### 可选方式：Python 3.10 自定义运行时
 
-如果依赖包大小和系统库兼容性可控，也可以使用 Python 自定义运行时。
+如果依赖包大小和系统库兼容性可控，也可以使用 Python 自定义运行时。由于 `rapidocr-onnxruntime` 依赖 `onnxruntime`，ZIP 部署时推荐选择 **Python 3.10**，不要选择 Python 3.12，否则可能出现 `No module named uvicorn`、`onnxruntime` 无可用 wheel 或二进制依赖不兼容问题。
 
 部署步骤：
 
