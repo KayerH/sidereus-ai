@@ -425,6 +425,7 @@ VITE_API_BASE_URL=https://your-fc-http-trigger-domain
 
 - `LLM_API_KEY` 应通过函数计算环境变量或密钥管理配置，不要写入代码仓库。
 - 如果后端包体过大，优先使用容器运行时。
+- 后端已提供 [Dockerfile](backend/Dockerfile)，用于阿里云函数计算容器运行时部署并保留 OCR 能力。
 - Redis 推荐使用阿里云 Redis 或兼容 Redis 服务。
 - 生产环境需要把 GitHub Pages 域名加入 `CORS_ORIGINS`。
 

@@ -69,20 +69,51 @@ uvicorn app.main:app --host 0.0.0.0 --port 9000
 
 项目依赖 RapidOCR、ONNXRuntime、PyMuPDF 等 PDF/OCR 相关库，部署包可能较大。生产环境优先推荐函数计算容器运行时，依赖更可控。
 
-部署步骤：
+仓库已提供后端镜像文件：
 
-1. 准备后端镜像，工作目录指向 `backend`。
-2. 安装 `backend/requirements.txt` 中的依赖。
-3. 设置启动命令：
-
-```bash
-uvicorn app.main:app --host 0.0.0.0 --port 9000
+```text
+backend/Dockerfile
 ```
 
-4. 在函数计算 FC 创建容器函数。
+该镜像基于 `python:3.10-slim`，并安装 OCR/OpenCV/ONNXRuntime 常见系统库：
+
+```text
+libgl1
+libglib2.0-0
+libgomp1
+libsm6
+libxext6
+libxrender1
+libstdc++6
+```
+
+部署步骤：
+
+1. 在阿里云容器镜像服务 ACR 创建镜像仓库。
+2. 以 `backend` 目录作为 Docker build 上下文构建镜像。
+3. 将镜像推送到 ACR。
+4. 在函数计算 FC 创建容器函数，选择该镜像。
 5. 配置 HTTP 触发器。
 6. 配置生产环境变量。
 7. 部署后访问：
+
+```bash
+docker build -t sidereus-ai-backend:latest ./backend
+```
+
+容器启动命令已在 `Dockerfile` 中配置：
+
+```bash
+python -m uvicorn app.main:app --host 0.0.0.0 --port 9000
+```
+
+函数监听端口设置为：
+
+```text
+9000
+```
+
+健康检查：
 
 ```text
 https://your-fc-http-trigger-domain/api/health
@@ -118,7 +149,7 @@ uvicorn app.main:app --host 0.0.0.0 --port 9000
 
 注意事项：
 
-- OCR 相关依赖可能需要额外系统库支持。
+- OCR 相关依赖需要系统库支持，优先使用容器运行时。
 - 如果安装依赖失败或部署包过大，改用容器运行时。
 - 函数超时时间应覆盖 PDF 解析、OCR 和 LLM 调用耗时。
 - 建议为完整分析接口预留至少 5 分钟级别的超时时间。
