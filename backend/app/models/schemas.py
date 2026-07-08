@@ -45,6 +45,7 @@ class BasicInfo(BaseModel):
     name: str = ""
     phone: str = ""
     email: str = ""
+    age: str = ""
     address: str = ""
 
 
@@ -82,6 +83,26 @@ class JobRequirement(BaseModel):
     education_requirements: str = ""
     job_keywords: list[str] = Field(default_factory=list)
     responsibilities: list[str] = Field(default_factory=list)
+    raw_description: str = ""
+    atomic_requirements: list["AtomicRequirement"] = Field(default_factory=list)
+
+
+class AtomicRequirement(BaseModel):
+    id: str = ""
+    text: str = ""
+    requirement_type: str = "core"
+    capability_category: str = "general"
+    capability_name: str = ""
+    examples: list[str] = Field(default_factory=list)
+    required_concepts: list[str] = Field(default_factory=list)
+    acceptable_evidence: list[str] = Field(default_factory=list)
+    evidence_logic: str = "PARTIAL_OK"
+    logic: str = "OR"
+    min_count: int = 1
+    proficiency: str = "熟悉"
+    is_hard: bool = False
+    is_open_ended: bool = True
+    weight: float = 10
 
 
 class ScoringWeights(BaseModel):
@@ -114,13 +135,46 @@ class ScoreBreakdown(BaseModel):
 class MatchResult(BaseModel):
     score: int = 0
     level: str = "匹配度较低"
+    eligibility: str = "PASS"
+    confidence_score: int = 0
     breakdown: ScoreBreakdown = Field(default_factory=ScoreBreakdown)
     weights: ScoringWeights = Field(default_factory=ScoringWeights)
     matched_keywords: list[str] = Field(default_factory=list)
     missing_keywords: list[str] = Field(default_factory=list)
+    requirement_results: list["RequirementMatch"] = Field(default_factory=list)
+    strengths: list[str] = Field(default_factory=list)
+    gaps: list[str] = Field(default_factory=list)
+    risks: list[str] = Field(default_factory=list)
     reason: str = ""
     suggestions: list[str] = Field(default_factory=list)
     ai_review: str = ""
+
+
+class RequirementMatch(BaseModel):
+    requirement_id: str = ""
+    requirement: str = ""
+    category: str = ""
+    weight: float = 0
+    status: str = "INSUFFICIENT_EVIDENCE"
+    score: float = 0
+    semantic_score: float = 0
+    evidence_strength: float = 0
+    proficiency_score: float = 0
+    project_depth: float = 0
+    responsibility_score: float = 0
+    recency_score: float = 0
+    relation: str = "无证据"
+    matched_skills: list[str] = Field(default_factory=list)
+    evidence: list[str] = Field(default_factory=list)
+    direct_evidence: list[str] = Field(default_factory=list)
+    inferred_evidence: list[str] = Field(default_factory=list)
+    missing_evidence: list[str] = Field(default_factory=list)
+    rule_score: float = 0
+    llm_score: float = 0
+    judge_confidence: float = 0
+    reason: str = ""
+    gaps: list[str] = Field(default_factory=list)
+    confidence: float = 0
 
 
 class AnalyzeFullResponse(BaseModel):

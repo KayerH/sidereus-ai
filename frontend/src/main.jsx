@@ -27,8 +27,35 @@ const WEIGHT_LABELS = {
   experience_relevance: "经验相关",
   project_relevance: "项目相关",
   education_fit: "学历背景",
-  keyword_coverage: "关键词覆盖",
+  keyword_coverage: "要求覆盖",
 };
+
+const STATUS_LABELS = {
+  FULLY_MATCHED: "完全匹配",
+  MOSTLY_MATCHED: "高度匹配",
+  PARTIALLY_MATCHED: "部分匹配",
+  INSUFFICIENT_EVIDENCE: "证据不足",
+  NOT_MATCHED: "未匹配",
+  CONFLICTED: "存在冲突",
+};
+
+const JD_PLACEHOLDER = `建议按一行一条输入，支持 -、*、序号或自然段，例如：
+- 计算机相关专业在读，本科或研究生
+- 熟悉至少一种后端语言，能写基础 REST API
+- 熟悉基础 SQL，能完成增删改查和简单联表
+- 了解 React 或 Vue，有完整课程项目或 side project
+- 每周可实习 4 天，能持续 3 个月以上
+- 能使用 Cursor / Claude Code / ChatGPT 提升效率，并能判断生成代码对错`;
+
+const LOADING_STEPS = [
+  "安全检查",
+  "PDF 解析",
+  "信息提取",
+  "JD 拆分",
+  "证据检索",
+  "模型推理",
+  "综合评分",
+];
 
 function App() {
   const [file, setFile] = useState(null);
@@ -42,6 +69,7 @@ function App() {
     () => Object.values(weights).reduce((sum, value) => sum + Number(value || 0), 0),
     [weights],
   );
+  const weightTotalValid = weightTotal === 100;
 
   async function handleAnalyze(event) {
     event.preventDefault();
@@ -54,6 +82,10 @@ function App() {
     }
     if (!jobDescription.trim()) {
       setError("请输入岗位 JD。");
+      return;
+    }
+    if (!weightTotalValid) {
+      setError("评分权重总和必须等于 100。");
       return;
     }
 
@@ -119,7 +151,7 @@ function App() {
             <textarea
               value={jobDescription}
               onChange={(event) => setJobDescription(event.target.value)}
-              placeholder="粘贴招聘岗位描述，例如 Python 后端实习生，熟悉 FastAPI、Redis、LLM API..."
+              placeholder={JD_PLACEHOLDER}
             />
           </label>
 
@@ -136,7 +168,10 @@ function App() {
                 <RotateCcw size={16} />
               </button>
             </div>
-            <div className="weight-total">总权重 {weightTotal}</div>
+            <div className={`weight-total ${weightTotalValid ? "" : "invalid"}`}>
+              总权重 {weightTotal} / 100
+              {!weightTotalValid && <span>请调整到 100 后开始分析</span>}
+            </div>
             {Object.entries(weights).map(([key, value]) => (
               <label className="weight-row" key={key}>
                 <span>{WEIGHT_LABELS[key]}</span>
@@ -165,7 +200,7 @@ function App() {
             </div>
           )}
 
-          <button className="primary-button" type="submit" disabled={loading}>
+          <button className="primary-button" type="submit" disabled={loading || !weightTotalValid}>
             {loading ? <Loader2 className="spin" size={18} /> : <BriefcaseBusiness size={18} />}
             <span>{loading ? "分析中" : "开始分析"}</span>
           </button>
@@ -182,7 +217,14 @@ function ResultPanel({ result, loading }) {
     return (
       <section className="result-panel centered">
         <Loader2 className="spin" size={34} />
-        <p>正在解析 PDF、抽取信息并计算匹配度...</p>
+        <p>正在分析，通常需要 1-2 分钟，请保持页面打开。</p>
+        <div className="progress-steps">
+          {LOADING_STEPS.map((step, index) => (
+            <span key={step} style={{ animationDelay: `${index * 0.35}s` }}>
+              {step}
+            </span>
+          ))}
+        </div>
       </section>
     );
   }
@@ -212,7 +254,7 @@ function ResultPanel({ result, loading }) {
         </div>
         <div className="cache-state">
           <CheckCircle2 size={16} />
-          <span>{result.metadata.cache_backend}</span>
+          <span>{match.eligibility || "PASS"} · 置信度 {match.confidence_score || 0}% · {result.metadata.cache_backend}</span>
         </div>
       </div>
 
@@ -242,6 +284,8 @@ function ResultPanel({ result, loading }) {
           ))}
         </div>
       </div>
+
+      <RequirementBlock requirements={match.requirement_results || []} />
 
       <TagBlock title="已匹配关键词" tags={match.matched_keywords} />
       <TagBlock title="待补充关键词" tags={match.missing_keywords} muted />
@@ -278,6 +322,76 @@ function ResultPanel({ result, loading }) {
   );
 }
 
+function RequirementBlock({ requirements }) {
+  if (!requirements.length) {
+    return null;
+  }
+
+  return (
+    <div className="block">
+      <h3>岗位要求逐条匹配</h3>
+      <div className="requirement-list">
+        {requirements.map((item) => (
+          <article className="requirement-card" key={item.requirement_id || item.requirement}>
+            <div className="requirement-head">
+              <div>
+                <strong>{item.requirement}</strong>
+                <span>{item.relation}</span>
+              </div>
+              <div className={`status-pill status-${item.status}`}>
+                {STATUS_LABELS[item.status] || item.status}
+                <b>{Math.round(item.score)}</b>
+              </div>
+            </div>
+            <p>{item.reason}</p>
+            {!!item.matched_skills?.length && (
+              <div className="mini-tags">
+                {item.matched_skills.slice(0, 8).map((skill) => (
+                  <span key={`${item.requirement_id}-${skill}`}>{skill}</span>
+                ))}
+              </div>
+            )}
+            {!!item.evidence?.length && (
+              <ul className="evidence-list">
+                {item.evidence.slice(0, 2).map((evidence) => (
+                  <li key={evidence}>{evidence}</li>
+                ))}
+              </ul>
+            )}
+            <EvidenceGroup title="直接证据" items={item.direct_evidence} />
+            <EvidenceGroup title="推断证据" items={item.inferred_evidence} inferred />
+            <EvidenceGroup title="缺失证据" items={item.missing_evidence} missing />
+            {!!item.gaps?.length && (
+              <ul className="gap-list">
+                {item.gaps.slice(0, 2).map((gap) => (
+                  <li key={gap}>{gap}</li>
+                ))}
+              </ul>
+            )}
+          </article>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function EvidenceGroup({ title, items = [], inferred = false, missing = false }) {
+  if (!items.length) {
+    return null;
+  }
+  const className = `evidence-group ${inferred ? "inferred" : ""} ${missing ? "missing" : ""}`;
+  return (
+    <div className={className}>
+      <b>{title}</b>
+      <ul>
+        {items.slice(0, 3).map((item) => (
+          <li key={`${title}-${item}`}>{item}</li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 function InfoBlock({ title, items }) {
   return (
     <div className="block">
@@ -310,6 +424,7 @@ function formatKey(key) {
     name: "姓名",
     phone: "电话",
     email: "邮箱",
+    age: "年龄",
     address: "地址",
   };
   return map[key] || key;

@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 import json
 from dataclasses import dataclass
+from datetime import date
 from typing import Any
 
 from app.models.schemas import (
@@ -16,12 +17,14 @@ from app.models.schemas import (
     ResumeSection,
 )
 from app.services.llm_service import LLMService
+from app.utils.skill_match import contains_term
 from app.utils.text import clean_text, truncate_text, unique_keep_order
 
 
 PHONE_RE = re.compile(r"(?:\+?86[- ]?)?1[3-9](?:[ -]?\d){9}")
 EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+\s*@\s*[A-Za-z0-9.-]+\s*\.\s*[A-Za-z]{2,}")
 URL_RE = re.compile(r"https?://[^\s，。；;]+|(?:github|gitee)\.com/[A-Za-z0-9_.-]+", re.I)
+BIRTH_RE = re.compile(r"(19\d{2}|20[0-1]\d)[年./-]\s*(1[0-2]|0?[1-9])?(?:[月./-]\s*([0-3]?\d)日?)?")
 PERIOD_RE = re.compile(
     r"((?:19|20)\d{2}[./-](?:1[0-2]|0?[1-9])?)\s*(?:-|—|–|至|~|到)\s*((?:19|20)\d{2}[./-](?:1[0-2]|0?[1-9])?|至今|今|present)",
     re.I,
@@ -207,6 +210,12 @@ class ResumeExtractionService:
             required=True,
             warnings=warnings,
         )
+        age = self._select_field(
+            "basic_info.age",
+            self._age_candidates(text, sections),
+            required=False,
+            warnings=warnings,
+        )
         address = self._select_field(
             "basic_info.address",
             self._address_candidates(text, sections),
@@ -214,7 +223,7 @@ class ResumeExtractionService:
             warnings=warnings,
         )
 
-        for detail in [name, phone, email, address]:
+        for detail in [name, phone, email, age, address]:
             field_details[detail.source_key] = detail.field  # type: ignore[attr-defined]
 
         education = self._extract_education(sections)
@@ -254,6 +263,7 @@ class ResumeExtractionService:
                 name=name.field.normalized_value,
                 phone=phone.field.normalized_value,
                 email=email.field.normalized_value,
+                age=age.field.normalized_value,
                 address=address.field.normalized_value,
             ),
             job_intention=job_intention,
@@ -310,7 +320,7 @@ class ResumeExtractionService:
 
 返回 JSON 结构：
 {{
-  "basic_info": {{"name": "", "phone": "", "email": "", "address": ""}},
+  "basic_info": {{"name": "", "phone": "", "email": "", "age": "", "address": ""}},
   "job_intention": {{"position": "", "expected_salary": ""}},
   "background": {{
     "years_of_experience": "",
@@ -422,6 +432,31 @@ class ResumeExtractionService:
                 normalized = re.sub(r"\s+", "", match.group(0))
                 if self._valid_email(normalized):
                     candidates.append(FieldCandidate(normalized, source, confidence, match.group(0), normalized=True))
+        return candidates
+
+    def _age_candidates(self, text: str, sections: dict[str, ResumeSection]) -> list[FieldCandidate]:
+        candidates: list[FieldCandidate] = []
+        search_text = "\n".join([sections.get("basic_info", ResumeSection(name="basic_info")).text, "\n".join(text.splitlines()[:18])])
+
+        explicit_age = re.search(r"(?:年龄|Age)[:： ]*(\d{1,2})(?=\s*(?:岁|现居|地址|籍贯|邮箱|电话|手机|$))", search_text, re.I)
+        if explicit_age:
+            value = explicit_age.group(1)
+            if self._valid_age(value):
+                candidates.append(FieldCandidate(value, "age_label_rule", 0.9, explicit_age.group(0), normalized=True))
+
+        age_suffix = re.search(r"(?<!\d)(\d{1,2})\s*岁(?!\d)", search_text)
+        if age_suffix:
+            value = age_suffix.group(1)
+            if self._valid_age(value):
+                candidates.append(FieldCandidate(value, "age_suffix_rule", 0.78, age_suffix.group(0), normalized=True))
+
+        birth_match = re.search(r"(?:出生年月|出生日期|生日|出生|Birth)[:： ]*([^\n，。；;]{4,20})", search_text, re.I)
+        birth_text = birth_match.group(1) if birth_match else search_text
+        for match in BIRTH_RE.finditer(birth_text):
+            age = self._age_from_birth_match(match)
+            if age:
+                candidates.append(FieldCandidate(str(age), "birthdate_rule", 0.72, match.group(0), normalized=True))
+                break
         return candidates
 
     def _address_candidates(self, text: str, sections: dict[str, ResumeSection]) -> list[FieldCandidate]:
@@ -584,9 +619,9 @@ class ResumeExtractionService:
 
     @staticmethod
     def _extract_skills(text: str) -> list[str]:
-        matched = [skill for skill in COMMON_SKILLS if re.search(re.escape(skill), text, re.I)]
+        matched = [skill for skill in COMMON_SKILLS if contains_term(text, skill)]
         for raw_value, normalized_value in SKILL_ALIASES.items():
-            if re.search(re.escape(raw_value), text, re.I):
+            if contains_term(text, raw_value):
                 matched.append(normalized_value)
         return unique_keep_order(matched)
 
@@ -665,6 +700,27 @@ class ResumeExtractionService:
     @staticmethod
     def _valid_email(value: str) -> bool:
         return bool(re.fullmatch(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}", value))
+
+    @staticmethod
+    def _valid_age(value: str) -> bool:
+        try:
+            age = int(value)
+        except ValueError:
+            return False
+        return 15 <= age <= 65
+
+    @staticmethod
+    def _age_from_birth_match(match: re.Match[str]) -> int | None:
+        year = int(match.group(1))
+        month = int(match.group(2) or 1)
+        day = int(match.group(3) or 1)
+        try:
+            birthday = date(year, month, day)
+        except ValueError:
+            return None
+        today = date.today()
+        age = today.year - birthday.year - ((today.month, today.day) < (birthday.month, birthday.day))
+        return age if 15 <= age <= 65 else None
 
     @staticmethod
     def _build_summary(text: str, sections: dict[str, ResumeSection]) -> str:
