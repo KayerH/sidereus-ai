@@ -100,9 +100,9 @@ function App() {
         method: "POST",
         body: formData,
       });
-      const payload = await response.json();
+      const payload = await parseResponsePayload(response);
       if (!response.ok) {
-        throw new Error(payload.detail || "分析失败，请稍后重试。");
+        throw new Error(formatRequestError(payload, response.status));
       }
       setResult(payload);
     } catch (requestError) {
@@ -428,6 +428,34 @@ function formatKey(key) {
     address: "地址",
   };
   return map[key] || key;
+}
+
+async function parseResponsePayload(response) {
+  const text = await response.text();
+  if (!text) {
+    return {};
+  }
+  try {
+    return JSON.parse(text);
+  } catch {
+    return { message: text };
+  }
+}
+
+function formatRequestError(payload, status) {
+  if (payload.detail) {
+    return Array.isArray(payload.detail) ? JSON.stringify(payload.detail) : String(payload.detail);
+  }
+  if (payload.Message || payload.Code) {
+    const code = payload.Code ? `错误码：${payload.Code}` : `HTTP ${status}`;
+    const message = payload.Message ? `，原因：${payload.Message}` : "";
+    const requestId = payload.RequestId ? `，RequestId：${payload.RequestId}` : "";
+    return `${code}${message}${requestId}`;
+  }
+  if (payload.message) {
+    return String(payload.message);
+  }
+  return `分析失败，HTTP 状态码：${status}`;
 }
 
 createRoot(document.getElementById("root")).render(<App />);
