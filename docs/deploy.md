@@ -90,12 +90,42 @@ libstdc++6
 部署步骤：
 
 1. 在阿里云容器镜像服务 ACR 创建镜像仓库。
-2. 以 `backend` 目录作为 Docker build 上下文构建镜像。
-3. 将镜像推送到 ACR。
+2. 在 GitHub 仓库配置 Actions 变量和密钥。
+3. 由 GitHub Actions 构建后端镜像并推送到 ACR。
 4. 在函数计算 FC 创建容器函数，选择该镜像。
 5. 配置 HTTP 触发器。
 6. 配置生产环境变量。
-7. 部署后访问：
+7. 部署后访问。
+
+GitHub Actions 已提供镜像构建工作流：
+
+```text
+.github/workflows/deploy-backend-image.yml
+```
+
+需要在 GitHub 仓库中配置以下 Repository variables：
+
+```text
+ALIYUN_REGISTRY=crpi-xxxx.cn-hangzhou.personal.cr.aliyuncs.com
+ALIYUN_NAMESPACE=kayerh
+ALIYUN_IMAGE_NAME=sidereus-ai-backend
+```
+
+需要配置以下 Repository secrets：
+
+```text
+ALIYUN_REGISTRY_USERNAME=你的 ACR 用户名
+ALIYUN_REGISTRY_PASSWORD=你的 ACR 密码
+```
+
+推送到 `main` 后，工作流会构建并推送两个镜像 tag：
+
+```text
+crpi-xxxx.cn-hangzhou.personal.cr.aliyuncs.com/kayerh/sidereus-ai-backend:latest
+crpi-xxxx.cn-hangzhou.personal.cr.aliyuncs.com/kayerh/sidereus-ai-backend:<commit短哈希>
+```
+
+本地有 Docker 时也可以手动构建：
 
 ```bash
 docker build -t sidereus-ai-backend:latest ./backend
