@@ -418,13 +418,23 @@ class ScoringService:
         return [item.text[:260] for item in evidence[:4]]
 
     def _score_education_requirement(self, requirement: AtomicRequirement, profile: CandidateProfile) -> RequirementMatch:
-        required_rank = self._degree_rank(requirement.text)
-        semantic_score = 100 if required_rank and profile.education_rank >= required_rank else 0
-        if not required_rank:
-            semantic_score = 80 if profile.education_rank else 20
+        required_rank = self._required_degree_rank(requirement.text)
+        degree_matched = profile.education_rank >= required_rank if required_rank else bool(profile.education_rank)
+        major_required = self._requires_computer_related_major(requirement.text)
+        major_matched = self._has_computer_related_major(profile.education_text) if major_required else True
+
+        if degree_matched and major_matched:
+            semantic_score = 100
+        elif degree_matched and major_required:
+            semantic_score = 65
+        elif not required_rank and profile.education_rank:
+            semantic_score = 80
+        else:
+            semantic_score = 0
         status = "FULLY_MATCHED" if semantic_score >= 90 else "NOT_MATCHED"
         evidence_strength = 90 if profile.education_text else 0
         score = 100 if semantic_score >= 90 else 0
+        missing_evidence = self._education_missing_evidence(required_rank, degree_matched, major_required, major_matched)
         return RequirementMatch(
             requirement_id=requirement.id,
             requirement=requirement.text,
@@ -443,12 +453,12 @@ class ScoringService:
             evidence=[profile.education_text] if profile.education_text else [],
             direct_evidence=[profile.education_text] if profile.education_text else [],
             inferred_evidence=[],
-            missing_evidence=[] if score else ["学历条件可能不满足或未识别"],
+            missing_evidence=missing_evidence,
             rule_score=score,
             llm_score=0,
             judge_confidence=0,
             reason="学历满足岗位要求" if score else "未发现满足岗位要求的学历证据",
-            gaps=[] if score else ["学历条件可能不满足或未识别"],
+            gaps=missing_evidence,
             confidence=95 if profile.education_text else 45,
         )
 
@@ -1020,3 +1030,51 @@ class ScoringService:
         if any(token in text for token in ["大专", "专科"]):
             return 2
         return 0
+
+    @staticmethod
+    def _required_degree_rank(text: str) -> int:
+        if any(token in text for token in ["大专", "专科"]):
+            return 2
+        if any(token in text for token in ["本科", "学士", "Bachelor"]):
+            return 3
+        if any(token in text for token in ["硕士", "研究生", "Master"]):
+            return 4
+        if any(token in text for token in ["博士", "PhD"]):
+            return 5
+        return 0
+
+    @staticmethod
+    def _requires_computer_related_major(text: str) -> bool:
+        return any(token in text for token in ["计算机相关专业", "计算机相关", "计算机专业"])
+
+    @staticmethod
+    def _has_computer_related_major(text: str) -> bool:
+        computer_major_terms = [
+            "计算机",
+            "软件工程",
+            "网络工程",
+            "信息安全",
+            "网络与信息安全",
+            "数据科学",
+            "人工智能",
+            "物联网",
+            "电子信息",
+            "通信工程",
+        ]
+        return any(term in text for term in computer_major_terms)
+
+    @staticmethod
+    def _education_missing_evidence(
+        required_rank: int,
+        degree_matched: bool,
+        major_required: bool,
+        major_matched: bool,
+    ) -> list[str]:
+        missing = []
+        if required_rank and not degree_matched:
+            missing.append("未发现满足岗位要求的学历层次")
+        if major_required and not major_matched:
+            missing.append("未发现计算机相关专业证据")
+        if not missing and not degree_matched:
+            missing.append("学历条件可能不满足或未识别")
+        return missing
