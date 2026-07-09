@@ -25,5 +25,3 @@ RUN python -m pip install --upgrade pip \
 COPY app ./app
 
 EXPOSE 9000
-
-CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "9000"]

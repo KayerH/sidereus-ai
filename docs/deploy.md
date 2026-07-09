@@ -131,10 +131,10 @@ crpi-xxxx.cn-hangzhou.personal.cr.aliyuncs.com/kayerh/sidereus-ai-backend:<commi
 docker build -t sidereus-ai-backend:latest ./backend
 ```
 
-容器启动命令已在 `Dockerfile` 中配置：
+函数计算容器运行时中填写启动命令：
 
 ```bash
-python -m uvicorn app.main:app --host 0.0.0.0 --port 9000
+uvicorn app.main:app --host 0.0.0.0 --port 9000
 ```
 
 函数监听端口设置为：
